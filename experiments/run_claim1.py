@@ -11,19 +11,42 @@ Outputs saved in results/ directory.
 
 import sys
 import os
+import time
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-import time
-from sklearn.linear_model import LogisticRegression
 
 from src.beta_svarm import BetaSVARM
-from src.baselines import (run_tmc_shapley, run_beta_shapley, run_banzhaf,
-                            run_loo, run_random)
-from src.datasets import load_adult, load_mnist_pca, load_gaussian
+from src.baselines import run_tmc_shapley, run_beta_shapley, run_banzhaf
+from src.datasets import (
+    load_2dplanes,
+    load_adult,
+    load_covertype,
+    load_creditcard,
+    load_fashion_mnist_pca,
+    load_gaussian,
+    load_mnist_pca,
+    load_phoneme,
+)
 from src.utils import plot_convergence, plot_runtime, plot_multisemivalue
+
+
+FORMAL_DATASETS = [
+    ('Adult', load_adult),
+    ('2dplanes', load_2dplanes),
+    ('Covertype', load_covertype),
+    ('Phoneme', load_phoneme),
+    ('CreditCard', load_creditcard),
+    ('MNIST', load_mnist_pca),
+    ('FashionMNIST', load_fashion_mnist_pca),
+]
+
+CONVERGENCE_CHECKPOINTS = [500, 1000, 2000, 3000, 5000, 8000, 10000]
+CONVERGENCE_GT_BUDGET = 30000
+RUNTIME_BUDGET = 5000
+MULTISEMIVALUE_BUDGET = 10000
 
 
 def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
@@ -31,10 +54,9 @@ def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
     """Experiment 1.1: Convergence curves."""
     print(f'\n--- Convergence: {dataset_name} ---')
 
-    # Ground truth: large-budget TMC-Shapley via pyDVL
     print('  Computing ground truth (TMC-Shapley, large budget)...')
     true_values, _ = run_tmc_shapley(X_tr, y_tr, X_val, y_val,
-                                      max_updates=gt_budget, n_jobs=4)
+                                     max_updates=gt_budget, n_jobs=4)
 
     results = {name: [] for name in
                ['β-SVARM', 'TMC-Shapley', 'Beta Shapley', 'Data Banzhaf']}
@@ -42,24 +64,20 @@ def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
     for budget in checkpoints:
         print(f'  T = {budget}...')
 
-        # β-SVARM (ours)
         vals, _ = BetaSVARM(alpha=16, beta_param=1, random_state=42).fit(
             X_tr, y_tr, X_val, y_val, budget=budget)
         results['β-SVARM'].append(np.mean((vals - true_values) ** 2))
 
-        # TMC-Shapley via pyDVL
         vals, _ = run_tmc_shapley(X_tr, y_tr, X_val, y_val,
-                                   max_updates=budget, n_jobs=4)
+                                  max_updates=budget, n_jobs=4)
         results['TMC-Shapley'].append(np.mean((vals - true_values) ** 2))
 
-        # Beta Shapley via pyDVL
         vals, _ = run_beta_shapley(X_tr, y_tr, X_val, y_val,
-                                    alpha=1, beta=16, max_updates=budget, n_jobs=4)
+                                   alpha=1, beta=16, max_updates=budget, n_jobs=4)
         results['Beta Shapley'].append(np.mean((vals - true_values) ** 2))
 
-        # Data Banzhaf via pyDVL
         vals, _ = run_banzhaf(X_tr, y_tr, X_val, y_val,
-                               max_updates=budget, n_jobs=4)
+                              max_updates=budget, n_jobs=4)
         results['Data Banzhaf'].append(np.mean((vals - true_values) ** 2))
 
         for name in results:
@@ -86,15 +104,15 @@ def run_runtime(X_tr, y_tr, X_val, y_val, dataset_name, budget=5000):
 
     t0 = time.time()
     run_beta_shapley(X_tr, y_tr, X_val, y_val, alpha=1, beta=16,
-                      max_updates=budget, n_jobs=1)
+                     max_updates=budget, n_jobs=1)
     times['Beta Shapley'] = time.time() - t0
 
     t0 = time.time()
     run_banzhaf(X_tr, y_tr, X_val, y_val, max_updates=budget, n_jobs=1)
     times['Data Banzhaf'] = time.time() - t0
 
-    for name, t in times.items():
-        print(f'  {name}: {t:.2f}s')
+    for name, runtime in times.items():
+        print(f'  {name}: {runtime:.2f}s')
 
     plot_runtime(times, dataset_name, budget)
     return times
@@ -109,10 +127,10 @@ def run_multisemivalue(X_tr, y_tr, X_val, y_val, dataset_name, budget=10000):
     n = len(X_tr)
 
     semivalues = {
-        'Shapley':    svarm.reweight(meta, n, 1, 1),
-        'Beta(4,1)':  svarm.reweight(meta, n, 4, 1),
+        'Shapley': svarm.reweight(meta, n, 1, 1),
+        'Beta(4,1)': svarm.reweight(meta, n, 4, 1),
         'Beta(16,1)': values_beta16,
-        'Banzhaf':    svarm.banzhaf_reweight(meta, n),
+        'Banzhaf': svarm.banzhaf_reweight(meta, n),
     }
 
     print('  Spearman correlations:')
@@ -126,62 +144,56 @@ def run_multisemivalue(X_tr, y_tr, X_val, y_val, dataset_name, budget=10000):
     plot_multisemivalue(semivalues, dataset_name)
 
 
-# ====================================================================
 if __name__ == '__main__':
     print('=' * 60)
     print('β-SVARM Experiment Suite — Claim 1')
     print('=' * 60)
 
-    # ----- Load datasets -----
     print('\nLoading datasets...')
 
     print('  Gaussian synthetic (n=15 for exact ground truth)...')
-    Xg, yg, Xgv, ygv, _, _ = load_gaussian(n_train=15, n_val=200, seed=42)
+    gaussian_data = load_gaussian(n_train=15, n_val=200, seed=42)
 
-    print('  Adult (n=200)...')
-    Xa, ya, Xav, yav, _, _ = load_adult(n_train=200, n_val=200, seed=42)
+    formal_data = {}
+    for dataset_name, loader in FORMAL_DATASETS:
+        print(f'  {dataset_name} (n_train=200)...')
+        formal_data[dataset_name] = loader(n_train=200, n_val=200, n_test=500, seed=42)
 
-    print('  MNIST-PCA32 (n=200)...')
-    Xm, ym, Xmv, ymv, _, _ = load_mnist_pca(n_train=200, n_val=200, seed=42)
-
-    # ----- Experiment 1.1: Convergence -----
     print('\n' + '=' * 60)
     print('EXPERIMENT 1.1: Convergence curves')
     print('=' * 60)
 
+    Xg, yg, Xgv, ygv, _, _ = gaussian_data
     run_convergence(Xg, yg, Xgv, ygv, 'Gaussian',
                     checkpoints=[50, 100, 200, 500, 1000, 2000, 3000],
                     gt_budget=10000)
 
-    run_convergence(Xa, ya, Xav, yav, 'Adult',
-                    checkpoints=[500, 1000, 2000, 3000, 5000, 8000, 10000],
-                    gt_budget=30000)
+    for dataset_name, _ in FORMAL_DATASETS:
+        X_tr, y_tr, X_val, y_val, _, _ = formal_data[dataset_name]
+        run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
+                        checkpoints=CONVERGENCE_CHECKPOINTS,
+                        gt_budget=CONVERGENCE_GT_BUDGET)
 
-    run_convergence(Xm, ym, Xmv, ymv, 'MNIST',
-                    checkpoints=[500, 1000, 2000, 3000, 5000, 8000, 10000],
-                    gt_budget=30000)
-
-    # ----- Experiment 1.2: Runtime -----
     print('\n' + '=' * 60)
     print('EXPERIMENT 1.2: Runtime comparison')
     print('=' * 60)
 
-    run_runtime(Xa, ya, Xav, yav, 'Adult', budget=5000)
+    for dataset_name, _ in FORMAL_DATASETS:
+        X_tr, y_tr, X_val, y_val, _, _ = formal_data[dataset_name]
+        run_runtime(X_tr, y_tr, X_val, y_val, dataset_name, budget=RUNTIME_BUDGET)
 
-    # ----- Experiment 1.3: Multi-semivalue -----
     print('\n' + '=' * 60)
     print('EXPERIMENT 1.3: Multi-semivalue output')
     print('=' * 60)
 
-    run_multisemivalue(Xa, ya, Xav, yav, 'Adult', budget=10000)
+    for dataset_name, _ in FORMAL_DATASETS:
+        X_tr, y_tr, X_val, y_val, _, _ = formal_data[dataset_name]
+        run_multisemivalue(X_tr, y_tr, X_val, y_val, dataset_name,
+                           budget=MULTISEMIVALUE_BUDGET)
 
-    # ----- Done -----
     print('\n' + '=' * 60)
     print('ALL EXPERIMENTS COMPLETE!')
-    print('Check results/ directory for output figures:')
-    print('  convergence_Gaussian.png')
-    print('  convergence_Adult.png')
-    print('  convergence_MNIST.png')
-    print('  runtime_Adult.png')
-    print('  multisemivalue_Adult.png')
+    print('Check results/ directory for output figures.')
+    print('Gaussian is used only for exact convergence validation.')
+    print('Formal datasets: Adult, 2dplanes, Covertype, Phoneme, CreditCard, MNIST, FashionMNIST.')
     print('=' * 60)
