@@ -136,6 +136,34 @@ class BetaSVARM:
                     phi_minus[j, 1] = (phi_minus[j, 1] * old_c + v_i) / (old_c + 1)
                     count_minus[j, 1] += 1
 
+        # v(N) — grand coalition
+        all_idx = np.arange(n)
+        v_full = self._evaluate_utility(
+            all_idx, X_train, y_train, X_val, y_val, model_class)
+        eval_count += 1
+        for i in range(n):
+            # i ∈ N, |N\{i}| = n-1, so stratum k=n-1 for phi_plus
+            phi_plus[i, n - 1] = v_full
+            count_plus[i, n - 1] = 1
+
+        # Leave-one-out: v(N\{i}) for each i
+        for i in range(n):
+            if eval_count >= budget:
+                break
+            others = np.array([j for j in range(n) if j != i])
+            v_loo = self._evaluate_utility(
+                others, X_train, y_train, X_val, y_val, model_class)
+            eval_count += 1
+            # i ∉ A=N\{i}, |A|=n-1, so stratum k=n-1 for phi_minus
+            phi_minus[i, n - 1] = v_loo
+            count_minus[i, n - 1] = 1
+            # For all j ≠ i: j ∈ A=N\{i}, |A\{j}|=n-2, so stratum k=n-2 for phi_plus
+            for j in range(n):
+                if j != i:
+                    old_c = count_plus[j, n - 2]
+                    phi_plus[j, n - 2] = (phi_plus[j, n - 2] * old_c + v_loo) / (old_c + 1)
+                    count_plus[j, n - 2] += 1
+
         # ---- Phase 2: Warm-up (one sample per stratum s=2..n-2) ----
         for s in range(2, n - 1):
             if eval_count >= budget:
@@ -231,13 +259,18 @@ class BetaSVARM:
         M2[s] += delta * delta2
 
     def _aggregate(self, n, phi_plus, phi_minus, count_plus, count_minus, weights):
-        """Aggregate stratum estimates with given semivalue weights."""
+        """Aggregate stratum estimates with given semivalue weights.
+
+        weights[k] is the per-coalition weight (normalized so that
+        Σ_k C(n-1,k)*w(k) = 1).  The per-stratum contribution must
+        therefore be multiplied by C(n-1,k).
+        """
         values = np.zeros(n)
         for i in range(n):
             for k in range(n):
                 mu_p = phi_plus[i, k] if count_plus[i, k] > 0 else 0.0
                 mu_m = phi_minus[i, k] if count_minus[i, k] > 0 else 0.0
-                values[i] += weights[k] * (mu_p - mu_m)
+                values[i] += comb(n - 1, k, exact=True) * weights[k] * (mu_p - mu_m)
         return values
 
     def reweight(self, meta, n, alpha_new, beta_new):
