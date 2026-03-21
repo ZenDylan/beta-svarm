@@ -9,10 +9,42 @@ Core idea:
   4. Adaptive Neyman allocation steers budget to high-weight, high-variance strata
 """
 
+import math
 import numpy as np
 from scipy.special import beta as beta_func, comb
 from sklearn.linear_model import LogisticRegression
 import time
+
+
+def _generate_paper_distribution(n):
+    """
+    Probability distribution over coalition sizes (0..n) according to the
+    paper's theoretical optimal allocation for stratified sampling.
+
+    For even n:
+      P(s) ∝ 1/s for s=2..n/2-1 and s=n/2+1..n-2 (symmetric pairs)
+      P(n/2) ∝ 1/(n log n)
+    For odd n:
+      P(s) ∝ 1/s for s=2..(n-1)/2 and s=(n+1)/2..n-2 (symmetric pairs)
+    """
+    dist = [0.0 for _ in range(n + 1)]
+
+    if n % 2 == 0:
+        nlogn = n * math.log(n)
+        H = sum(1.0 / s for s in range(1, n // 2))
+        frac = (nlogn - 1) / (2 * nlogn * (H - 1))
+        for s in range(2, n // 2):
+            dist[s] = frac / s
+            dist[n - s] = frac / s
+        dist[n // 2] = 1.0 / nlogn
+    else:
+        H = sum(1.0 / s for s in range(1, (n - 1) // 2 + 1))
+        frac = 1.0 / (2 * (H - 1))
+        for s in range(2, (n - 1) // 2 + 1):
+            dist[s] = frac / s
+            dist[n - s] = frac / s
+
+    return dist
 
 
 class BetaSVARM:
@@ -211,11 +243,11 @@ class BetaSVARM:
             exactly in Phase 1
         """
         lo, hi = 2, n - 2  # valid range for random sampling
+        size = hi - lo + 1
         if hi < lo:
             # n <= 4: no interior strata, fall back to s=1..n-1
             return self.rng.randint(1, n)
         if self.adaptive and np.sum(stratum_count[lo:hi + 1]) > 0:
-            size = hi - lo + 1
             probs = np.zeros(size)
             for idx, s in enumerate(range(lo, hi + 1)):
                 # β weight for stratum k=s-1 (phi_plus) and k=s (phi_minus)
@@ -231,7 +263,13 @@ class BetaSVARM:
             if p_sum > 0:
                 probs /= p_sum
                 return lo + self.rng.choice(size, p=probs)
-        # Fallback: uniform over interior strata
+        # Fallback: paper distribution over interior strata s=2..n-2
+        full_dist = _generate_paper_distribution(n)
+        interior_probs = np.array([full_dist[s] for s in range(lo, hi + 1)])
+        p_sum = np.sum(interior_probs)
+        if p_sum > 0:
+            interior_probs /= p_sum
+            return lo + self.rng.choice(size, p=interior_probs)
         return self.rng.randint(lo, hi + 1)
 
     def _swarm_update(self, A, val, n, phi_plus, phi_minus,
