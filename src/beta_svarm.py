@@ -203,24 +203,35 @@ class BetaSVARM:
         return values, meta
 
     def _sample_stratum(self, n, beta_w, stratum_M2, stratum_count):
-        """Sample coalition size using adaptive Neyman or uniform distribution."""
-        lo, hi = max(1, 1), min(n - 1, n - 1)  # valid range: 1..n-1
+        """Sample coalition size using adaptive Neyman or uniform distribution.
+
+        Only samples from s=2..n-2 because:
+          - s=0 (empty set) and s=n (grand coalition) are singletons
+          - s=1 (singletons) and s=n-1 (leave-one-outs) are computed
+            exactly in Phase 1
+        """
+        lo, hi = 2, n - 2  # valid range for random sampling
+        if hi < lo:
+            # n <= 4: no interior strata, fall back to s=1..n-1
+            return self.rng.randint(1, n)
         if self.adaptive and np.sum(stratum_count[lo:hi + 1]) > 0:
-            probs = np.zeros(n)
-            for s in range(lo, hi + 1):
-                # β weight associated with this coalition size
-                w = beta_w[s - 1] if s - 1 < n else 0.0
+            size = hi - lo + 1
+            probs = np.zeros(size)
+            for idx, s in enumerate(range(lo, hi + 1)):
+                # β weight for stratum k=s-1 (phi_plus) and k=s (phi_minus)
+                # Use the average of the two relevant weights
+                w = (beta_w[s - 1] + beta_w[s]) / 2.0 if s < n else beta_w[s - 1]
                 # Estimated std dev
                 if stratum_count[s] > 1:
                     var_s = stratum_M2[s] / (stratum_count[s] - 1)
                 else:
                     var_s = 1.0
-                probs[s] = w * np.sqrt(max(var_s, 1e-12))
+                probs[idx] = w * np.sqrt(max(var_s, 1e-12))
             p_sum = np.sum(probs)
             if p_sum > 0:
                 probs /= p_sum
-                return self.rng.choice(n, p=probs)
-        # Fallback: uniform
+                return lo + self.rng.choice(size, p=probs)
+        # Fallback: uniform over interior strata
         return self.rng.randint(lo, hi + 1)
 
     def _swarm_update(self, A, val, n, phi_plus, phi_minus,
