@@ -6,6 +6,9 @@ pyDVL v0.10+ API:
   Dataset → SupervisedScorer → ModelUtility → Valuation.fit(data)
 """
 
+import os
+os.environ['JOBLIB_TEMP_FOLDER'] = 'C:/tmp'
+
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from joblib import parallel_config
@@ -40,7 +43,7 @@ def _make_utility(model, X_train, y_train, X_val, y_val):
 
 
 def run_tmc_shapley(X_train, y_train, X_val, y_val, max_updates=1000,
-                    model=None, n_jobs=4, seed=42):
+                    model=None, n_jobs=1, seed=42):
     """TMC-Shapley (Ghorbani & Zou, ICML 2019) via pyDVL."""
     if model is None:
         model = LogisticRegression(max_iter=500, random_state=seed)
@@ -51,7 +54,7 @@ def run_tmc_shapley(X_train, y_train, X_val, y_val, max_updates=1000,
         is_done=MaxUpdates(max_updates),
         seed=seed,
     )
-    with parallel_config(n_jobs=n_jobs):
+    with parallel_config(n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     # result.values is indexed by training point index
@@ -59,7 +62,7 @@ def run_tmc_shapley(X_train, y_train, X_val, y_val, max_updates=1000,
 
 
 def run_beta_shapley(X_train, y_train, X_val, y_val, alpha=1, beta=16,
-                     max_updates=1000, model=None, n_jobs=4, seed=42):
+                     max_updates=1000, model=None, n_jobs=1, seed=42):
     """Beta Shapley (Kwon & Zou, AISTATS 2022) via pyDVL."""
     if model is None:
         model = LogisticRegression(max_iter=500, random_state=seed)
@@ -73,14 +76,14 @@ def run_beta_shapley(X_train, y_train, X_val, y_val, alpha=1, beta=16,
         alpha=alpha,
         beta=beta,
     )
-    with parallel_config(n_jobs=n_jobs):
+    with parallel_config(n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result
 
 
 def run_banzhaf(X_train, y_train, X_val, y_val, max_updates=1000,
-                model=None, n_jobs=4, seed=42):
+                model=None, n_jobs=1, seed=42):
     """Data Banzhaf with MSR (Wang & Jia, AISTATS 2023) via pyDVL."""
     if model is None:
         model = LogisticRegression(max_iter=500, random_state=seed)
@@ -92,20 +95,20 @@ def run_banzhaf(X_train, y_train, X_val, y_val, max_updates=1000,
         sampler=sampler,
         is_done=MaxUpdates(max_updates),
     )
-    with parallel_config(n_jobs=n_jobs):
+    with parallel_config(n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result
 
 
-def run_loo(X_train, y_train, X_val, y_val, model=None, n_jobs=4, seed=42):
+def run_loo(X_train, y_train, X_val, y_val, model=None, n_jobs=1, seed=42):
     """Leave-One-Out valuation via pyDVL."""
     if model is None:
         model = LogisticRegression(max_iter=500, random_state=seed)
     train, utility = _make_utility(model, X_train, y_train, X_val, y_val)
 
     valuation = LOOValuation(utility=utility, progress=False)
-    with parallel_config(n_jobs=n_jobs):
+    with parallel_config(n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result
