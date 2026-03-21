@@ -54,7 +54,7 @@ def run_tmc_shapley(X_train, y_train, X_val, y_val, max_updates=1000,
         is_done=MaxUpdates(max_updates),
         seed=seed,
     )
-    with parallel_config(n_jobs=1):
+    with parallel_config(backend="threading", n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     # result.values is indexed by training point index
@@ -76,7 +76,7 @@ def run_beta_shapley(X_train, y_train, X_val, y_val, alpha=1, beta=16,
         alpha=alpha,
         beta=beta,
     )
-    with parallel_config(n_jobs=1):
+    with parallel_config(backend="threading", n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result
@@ -95,7 +95,7 @@ def run_banzhaf(X_train, y_train, X_val, y_val, max_updates=1000,
         sampler=sampler,
         is_done=MaxUpdates(max_updates),
     )
-    with parallel_config(n_jobs=1):
+    with parallel_config(backend="threading", n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result
@@ -108,7 +108,7 @@ def run_loo(X_train, y_train, X_val, y_val, model=None, n_jobs=1, seed=42):
     train, utility = _make_utility(model, X_train, y_train, X_val, y_val)
 
     valuation = LOOValuation(utility=utility, progress=False)
-    with parallel_config(n_jobs=1):
+    with parallel_config(backend="threading", n_jobs=1):
         valuation.fit(train)
     result = valuation.result
     return result.values, result

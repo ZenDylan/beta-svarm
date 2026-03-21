@@ -24,7 +24,7 @@ def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
 
     print('  Computing ground truth (TMC-Shapley, large budget)...')
     true_values, _ = run_tmc_shapley(X_tr, y_tr, X_val, y_val,
-                                      max_updates=gt_budget, n_jobs=4)
+                                      max_updates=gt_budget, n_jobs=1)
 
     results = {name: [] for name in
                ['β-SVARM', 'TMC-Shapley', 'Beta Shapley', 'Data Banzhaf']}
@@ -37,15 +37,15 @@ def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
         results['β-SVARM'].append(np.mean((vals - true_values) ** 2))
 
         vals, _ = run_tmc_shapley(X_tr, y_tr, X_val, y_val,
-                                   max_updates=budget, n_jobs=4)
+                                   max_updates=budget, n_jobs=1)
         results['TMC-Shapley'].append(np.mean((vals - true_values) ** 2))
 
         vals, _ = run_beta_shapley(X_tr, y_tr, X_val, y_val,
-                                    alpha=1, beta=16, max_updates=budget, n_jobs=4)
+                                    alpha=1, beta=16, max_updates=budget, n_jobs=1)
         results['Beta Shapley'].append(np.mean((vals - true_values) ** 2))
 
         vals, _ = run_banzhaf(X_tr, y_tr, X_val, y_val,
-                               max_updates=budget, n_jobs=4)
+                               max_updates=budget, n_jobs=1)
         results['Data Banzhaf'].append(np.mean((vals - true_values) ** 2))
 
         for name in results:
