@@ -64,7 +64,7 @@ def run_convergence(X_tr, y_tr, X_val, y_val, dataset_name,
     for budget in checkpoints:
         print(f'  T = {budget}...')
 
-        vals, _ = BetaSVARM(alpha=16, beta_param=1, random_state=42).fit(
+        vals, _ = BetaSVARM(alpha=16, beta_param=1, adaptive=False, random_state=42).fit(
             X_tr, y_tr, X_val, y_val, budget=budget)
         results['β-SVARM'].append(np.mean((vals - true_values) ** 2))
 
@@ -94,7 +94,7 @@ def run_runtime(X_tr, y_tr, X_val, y_val, dataset_name, budget=5000):
     times = {}
 
     t0 = time.time()
-    BetaSVARM(alpha=16, beta_param=1, random_state=42).fit(
+    BetaSVARM(alpha=16, beta_param=1, adaptive=False, random_state=42).fit(
         X_tr, y_tr, X_val, y_val, budget=budget)
     times['β-SVARM'] = time.time() - t0
 
@@ -122,7 +122,7 @@ def run_multisemivalue(X_tr, y_tr, X_val, y_val, dataset_name, budget=10000):
     """Experiment 1.3: Multiple semivalues from one run."""
     print(f'\n--- Multi-semivalue: {dataset_name} ---')
 
-    svarm = BetaSVARM(alpha=16, beta_param=1, adaptive=True, random_state=42)
+    svarm = BetaSVARM(alpha=16, beta_param=1, adaptive=False, random_state=42)
     values_beta16, meta = svarm.fit(X_tr, y_tr, X_val, y_val, budget=budget)
     n = len(X_tr)
 
