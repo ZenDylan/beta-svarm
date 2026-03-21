@@ -7,11 +7,20 @@ pyDVL v0.10+ API:
 """
 
 import os
+import warnings
 os.environ['JOBLIB_TEMP_FOLDER'] = 'C:/tmp'
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from joblib import parallel_config
+
+# Suppress expected RuntimeWarnings from pyDVL/sklearn when small sampled
+# subsets contain only one class — this is normal for MC-based valuation.
+warnings.filterwarnings(
+    "ignore",
+    message=".*samples of at least 2 classes.*",
+    category=RuntimeWarning,
+)
 
 from pydvl.valuation import (
     Dataset,
